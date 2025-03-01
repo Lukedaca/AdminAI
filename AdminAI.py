@@ -18,7 +18,6 @@ import random
 # Nastavení loggeru
 logging.basicConfig(filename='adminai.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
-
 class AdminAI:
     def __init__(self, root):
         self.root = root
@@ -146,9 +145,8 @@ class AdminAI:
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                    return {**default_config, **config}  # Kombinuje výchozí s načtenou konfigurací
+                    return {**default_config, **config}
             else:
-                # Vytvoří konfigurační soubor, pokud neexistuje
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(default_config, f, indent=4)
                 return default_config
@@ -164,7 +162,6 @@ class AdminAI:
             logging.info("Konfigurace úspěšně uložena")
         except Exception as e:
             logging.error(f"Chyba při ukládání konfigurace: {e}")
-
     def setup_ui(self):
         """Nastavení uživatelského rozhraní"""
         # Hlavní menu
@@ -181,6 +178,10 @@ class AdminAI:
         self.admin_menu.add_command(label="Archivovat dokument", command=lambda: self.archive_document())
         self.admin_menu.add_command(label="Přidat úkol", command=lambda: self.plan_task())
         self.admin_menu.add_command(label="Vygenerovat report", command=lambda: self.generate_report())
+        # Nové položky
+        self.admin_menu.add_command(label="Generovat e-mail", command=lambda: self.generate_email())
+        self.admin_menu.add_command(label="Generovat příspěvek na FB", command=lambda: self.generate_fb_post())
+        self.admin_menu.add_command(label="Generovat obsah na web", command=lambda: self.generate_web_content())
         self.admin_menu.add_separator()
         self.admin_menu.add_command(label="Nastavit připomenutí", command=lambda: self.set_reminder())
         self.admin_menu.add_command(label="Zobrazit statistiky", command=lambda: self.show_statistics())
@@ -314,12 +315,11 @@ class AdminAI:
         
         # Spuštění hodin
         self.update_clock()
-
     def update_clock(self):
         """Aktualizace hodin ve stavové liště"""
         current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
         self.status_clock.config(text=current_time)
-        self.root.after(1000, self.update_clock)  # Aktualizace každou sekundu
+        self.root.after(1000, self.update_clock)
 
     def display_output(self, message):
         """Zobrazí zprávu ve výstupním poli"""
@@ -335,12 +335,12 @@ class AdminAI:
             if result:
                 new_count = result[0] + 1
                 self.c.execute("UPDATE preferences SET count=?, last_used=CURRENT_TIMESTAMP WHERE action=? AND value=?", 
-                          (new_count, action, value))
+                            (new_count, action, value))
             else:
                 self.c.execute("INSERT INTO preferences (action, value, count, last_used) VALUES (?, ?, 1, CURRENT_TIMESTAMP)", 
-                          (action, value))
+                            (action, value))
             self.conn.commit()
-            self.update_learned_patterns()  # Aktualizace učených vzorů
+            self.update_learned_patterns()
         except sqlite3.Error as e:
             logging.error(f"Chyba při aktualizaci preference: {e}")
 
@@ -372,7 +372,11 @@ class AdminAI:
             r'(co|jaké|jaký)\s+(umí|funkce|schopnosti|dovednosti)': self.list_capabilities,
             r'pošli\s+email': self.send_email,
             r'(nastav|zobraz)\s+připomenutí\s+pro\s+(\d{4}-\d{2}-\d{2})': self.set_or_show_reminder_by_date,
-            r'(jak\s+se\s+máš|co\s+je\s+nového)': self.respond_to_general_question
+            r'(jak\s+se\s+máš|co\s+je\s+nového)': self.respond_to_general_question,
+            # Nové vzory
+            r'(vytvoř|generuj)\s+e-?mail': self.generate_email,
+            r'(vytvoř|generuj)\s+příspěvek\s+na\s+fb': self.generate_fb_post,
+            r'(vytvoř|generuj)\s+obsah\s+na\s+web': self.generate_web_content,
         }
         self.learned_patterns = {}
         try:
@@ -391,7 +395,7 @@ class AdminAI:
             learned_commands = self.c.fetchall()
             self.learned_patterns = {}
             for value, count in learned_commands:
-                if count > 1:  # Pouze pokud byl příkaz použit vícekrát
+                if count > 1:
                     pattern = re.compile(f"^{re.escape(value)}$")
                     self.learned_patterns[pattern] = lambda x=None, cmd=value: self.handle_learned_command(cmd)
             self.nlp_patterns = {**self.default_patterns, **self.learned_patterns}
@@ -403,28 +407,24 @@ class AdminAI:
         """Obsluha učeného příkazu"""
         self.display_output(f"Reaguji na učený příkaz: '{cmd}'. Jak vám mohu pomoci?")
         logging.info(f"Učený příkaz zpracován: {cmd}")
-
     def create_edit_dialog(self, title, fields, callback, validation_func=None):
         """Dialogové okno pro úpravu parametrů s validací"""
         dialog = tk.Toplevel(self.root)
         dialog.title(title)
         dialog.geometry("400x300")
-        dialog.grab_set()  # Zaměří okno
+        dialog.grab_set()
         
-        # Ikona okna (pokud existuje)
         try:
             dialog.iconbitmap('adminai.ico')
         except:
             pass
         
-        # Frame pro obsahy
         content_frame = ttk.Frame(dialog, padding="10")
         content_frame.pack(fill=tk.BOTH, expand=True)
         
         entries = {}
         row = 0
         
-        # Vytvoření polí
         for label, default, field_type, options in fields:
             ttk.Label(content_frame, text=label).grid(row=row, column=0, padx=5, pady=5, sticky=tk.W)
             
@@ -445,7 +445,6 @@ class AdminAI:
                 entry.insert(0, default)
                 entry.grid(row=row, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
                 
-                # Tlačítko pro výběr data
                 cal_button = ttk.Button(content_frame, text="...", width=2, 
                                      command=lambda e=entry: self.select_date(e))
                 cal_button.grid(row=row, column=2, padx=2, pady=5)
@@ -465,18 +464,15 @@ class AdminAI:
                 text.insert(tk.END, default)
                 entries[label] = text
                 
-                # Použije dva řádky
                 row += 1
             
             row += 1
         
-        # Tlačítka pro potvrzení/zrušení
         button_frame = ttk.Frame(dialog, padding="10")
         button_frame.pack(fill=tk.X)
         
         ttk.Button(button_frame, text="Zrušit", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
         
-        # Funkce pro validaci a volání callbacku
         def validate_and_submit():
             valid = True
             if validation_func:
@@ -490,10 +486,8 @@ class AdminAI:
         
         ttk.Button(button_frame, text="Potvrdit", command=validate_and_submit).pack(side=tk.RIGHT, padx=5)
         
-        # Zaměří první pole
         list(entries.values())[0].focus_set()
         
-        # Dialogové okno vrací zkonstruované prvky pro případné další použití
         return dialog, entries
 
     def select_date(self, entry_widget):
@@ -506,7 +500,6 @@ class AdminAI:
             date_dialog.geometry("300x250")
             date_dialog.grab_set()
             
-            # Získání aktuálního data z pole nebo použití dnešního data
             try:
                 current_date = datetime.strptime(entry_widget.get(), "%Y-%m-%d")
             except:
@@ -525,11 +518,9 @@ class AdminAI:
             
         except ImportError:
             messagebox.showinfo("Informace", "Pro lepší výběr data nainstalujte modul tkcalendar: pip install tkcalendar")
-
     def open_settings(self):
         """Otevře nastavení aplikace"""
         def save_settings(entries):
-            # Uložení nastavení do konfigurace
             self.config["email_server"] = entries["SMTP server"].get()
             self.config["email_port"] = int(entries["SMTP port"].get())
             self.config["email_username"] = entries["E-mail"].get()
@@ -572,7 +563,6 @@ class AdminAI:
     def edit_user_data(self):
         """Editace uživatelských dat"""
         try:
-            # Načtení všech uživatelských dat z databáze
             self.c.execute("SELECT key, value FROM user_data")
             user_data = dict(self.c.fetchall())
             
@@ -581,7 +571,7 @@ class AdminAI:
                     key = label.lower()
                     value = entry.get()
                     self.c.execute("UPDATE user_data SET value=?, last_updated=CURRENT_TIMESTAMP WHERE key=?", 
-                               (value, key))
+                                (value, key))
                 
                 self.conn.commit()
                 self.display_output("Uživatelská data byla aktualizována. Můžu vám ještě pomoci?")
@@ -601,7 +591,6 @@ class AdminAI:
         """Změna tématu aplikace"""
         try:
             if theme_name == "dark":
-                # Aplikace tmavého tématu
                 self.root.configure(bg='#1e1e1e')
                 style = ttk.Style()
                 style.theme_use('clam')
@@ -613,7 +602,6 @@ class AdminAI:
                 
                 self.output_text.configure(bg='#2d2d2d', fg='white', insertbackground='white')
             else:
-                # Světlé téma (výchozí)
                 self.root.configure(bg='#f0f0f0')
                 style = ttk.Style()
                 style.theme_use('clam')
@@ -625,7 +613,6 @@ class AdminAI:
                 
                 self.output_text.configure(bg='white', fg='black', insertbackground='black')
             
-            # Uložení preference tématu
             self.config["theme"] = theme_name
             self.save_config()
             
@@ -669,6 +656,9 @@ class AdminAI:
         - 'Zobraz statistiky' - ukáže počet schůzek a úkolů
         - 'Jaké mám schůzky dnes' - zobrazí dnešní schůzky
         - 'Pošli email' - pošle e-mail
+        - 'Vytvoř e-mail' - vygeneruje e-mail pro zkopírování
+        - 'Vytvoř příspěvek na FB' - vygeneruje příspěvek pro Facebook
+        - 'Vytvoř obsah na web' - vygeneruje obsah pro web
         - 'Zobraz připomenutí pro [datum]' - ukáže připomenutí pro konkrétní datum
         - 'Co můžeš udělat' - ukáže tuto nápovědu
         - 'Ahoj' nebo 'Dobrý den' - přivítání
@@ -696,6 +686,9 @@ class AdminAI:
         - Zobrazovat statistiky (např. 'zobraz statistiky')
         - Zobrazovat dnešní schůzky (např. 'jaké mám schůzky dnes')
         - Posílat e-maily (např. 'pošli email')
+        - Generovat e-maily (např. 'vytvoř e-mail')
+        - Generovat příspěvky na Facebook (např. 'vytvoř příspěvek na FB')
+        - Generovat obsah na web (např. 'vytvoř obsah na web')
         - Zobrazovat připomenutí pro konkrétní datum (např. 'zobraz připomenutí pro 2025-03-15')
         - Spravovat e-maily (zatím neimplementováno)
         - Vyplňovat formuláře (zatím neimplementováno)
@@ -712,16 +705,13 @@ class AdminAI:
         command = self.entry.get().strip().lower()
         self.display_output(f"Zpracovávám příkaz: {command}")
         
-        # Učení: Ukládání příkazu do preferences
         self.update_preference("command_" + command.split()[0], command)
         
-        # Hledání shody s NLP vzory
         for pattern, action in self.nlp_patterns.items():
             if re.match(pattern, command):
                 action()
                 return
         
-        # Obecné odpovědi pro neznámé příkazy
         responses = [
             "Promiň, nerozumím. Můžete mi říct, co potřebujete (např. 'naplánuj schůzku')?",
             "To mi není jasné. Zkuste prosím jiný příkaz, např. 'co můžeš udělat'.",
@@ -729,7 +719,6 @@ class AdminAI:
         ]
         self.display_output(random.choice(responses))
         logging.warning(f"Neznámý příkaz: {command}")
-
     def plan_meeting(self):
         """Naplánování nové schůzky"""
         def save_meeting(entries):
@@ -741,7 +730,7 @@ class AdminAI:
             
             try:
                 self.c.execute("INSERT INTO meetings (date, time, participants, location, notes) VALUES (?, ?, ?, ?, ?)", 
-                             (date, time, participants, location, notes))
+                            (date, time, participants, location, notes))
                 self.conn.commit()
                 self.display_output("Schůzka byla úspěšně naplánována. Kdykoliv si můžete zobrazit seznam schůzek. Potřebujete další pomoc?")
                 self.refresh_meeting_list()
@@ -792,7 +781,7 @@ class AdminAI:
             try:
                 os.rename(file_path, dest_path)
                 self.c.execute("INSERT INTO documents (name, path, folder, tags, notes) VALUES (?, ?, ?, ?, ?)", 
-                             (filename, dest_path, folder, "", ""))
+                            (filename, dest_path, folder, "", ""))
                 self.conn.commit()
                 self.display_output(f"Dokument {filename} byl úspěšně archivován do {folder}. Potřebujete další pomoc?")
             except Exception as e:
@@ -809,7 +798,7 @@ class AdminAI:
             
             try:
                 self.c.execute("INSERT INTO tasks (task, deadline, priority, status, notes) VALUES (?, ?, ?, ?, ?)", 
-                             (task, deadline, priority, "pending", notes))
+                            (task, deadline, priority, "pending", notes))
                 self.conn.commit()
                 self.display_output(f"Úkol '{task}' byl úspěšně přidán. Můžu vám ještě něco pomoci?")
                 self.refresh_task_list()
@@ -841,9 +830,8 @@ class AdminAI:
     def generate_report(self):
         """Generování reportu"""
         try:
-            # Příklad jednoduchého reportu pomocí matplotlib
             self.c.execute("SELECT date, time FROM meetings WHERE date >= ?", 
-                         (datetime.now().strftime("%Y-%m-%d"),))
+                        (datetime.now().strftime("%Y-%m-%d"),))
             meetings = self.c.fetchall()
             
             dates = [m[0] for m in meetings]
@@ -857,7 +845,6 @@ class AdminAI:
             plt.xticks(rotation=45)
             plt.tight_layout()
             
-            # Zobrazení grafu v GUI pomocí Tkinter
             canvas = FigureCanvasTkAgg(plt.gcf(), master=self.output_frame)
             canvas.draw()
             canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
@@ -878,10 +865,10 @@ class AdminAI:
             
             try:
                 self.c.execute("INSERT INTO reminders (message, due_datetime) VALUES (?, ?)", 
-                             (message, due_datetime))
+                            (message, due_datetime))
                 self.conn.commit()
                 self.display_output(f"Připomenutí '{message}' bylo nastaveno. Upozorním vás včas! Můžu vám ještě pomoci?")
-                self.check_reminders()  # Okamžitá kontrola
+                self.check_reminders()
             except sqlite3.Error as e:
                 logging.error(f"Chyba při nastavování připomenutí: {e}")
                 messagebox.showerror("Chyba", f"Nepodařilo se nastavit připomenutí: {e}")
@@ -919,23 +906,20 @@ class AdminAI:
                     self.c.execute("UPDATE reminders SET is_completed = 1 WHERE id = ?", (reminder_id,))
             
             self.conn.commit()
-            self.root.after(self.config["reminder_check_interval"] * 1000, self.check_reminders)  # Kontrola po zadaném intervalu
+            self.root.after(self.config["reminder_check_interval"] * 1000, self.check_reminders)
         except Exception as e:
             logging.error(f"Chyba při kontrole připomenutí: {e}")
 
     def show_statistics(self):
         """Zobrazení statistik"""
         try:
-            # Ověření existence sloupců v tabulce tasks
             self.c.execute("PRAGMA table_info(tasks)")
             columns = [col[1] for col in self.c.fetchall()]
             
-            # Počet schůzek dnes
             self.c.execute("SELECT COUNT(*) FROM meetings WHERE date >= ?", 
-                         (datetime.now().strftime("%Y-%m-%d"),))
+                        (datetime.now().strftime("%Y-%m-%d"),))
             meeting_count = self.c.fetchone()[0]
             
-            # Počet nevyřízených úkolů, pokud existuje sloupec status
             pending_tasks = 0
             if 'status' in columns:
                 self.c.execute("SELECT COUNT(*) FROM tasks WHERE status = 'pending'")
@@ -1037,11 +1021,10 @@ class AdminAI:
 
     def set_or_show_reminder_by_date(self, match):
         """Nastavení nebo zobrazení připomenutí pro konkrétní datum"""
-        date_str = match.group(2)  # Datum z příkazu (např. "2025-03-15")
+        date_str = match.group(2)
         try:
             datetime.strptime(date_str, "%Y-%m-%d")
             
-            # Zobrazení připomenutí pro dané datum
             self.c.execute("SELECT message, due_datetime FROM reminders WHERE is_completed = 0 AND date(due_datetime) = ?", (date_str,))
             reminders = self.c.fetchall()
             if reminders:
@@ -1072,7 +1055,7 @@ class AdminAI:
             tasks = self.c.fetchall()
             self.tasks_treeview.delete(*self.tasks_treeview.get_children())
             for task in tasks:
-                if len(task) == 4:  # Kontrola, zda máme všechny sloupce
+                if len(task) == 4:
                     self.tasks_treeview.insert("", "end", values=task)
                 else:
                     logging.warning(f"Nekompletní data úkolu: {task}")
@@ -1132,7 +1115,108 @@ class AdminAI:
         menu = tk.Menu(self.root, tearoff=0)
         menu.add_command(label="Smazat", command=delete_meeting)
         menu.post(event.x_root, event.y_root)
+    def generate_email(self):
+        """Generování e-mailu pro reprezentativní účely"""
+        def generate_and_show(entries):
+            name = entries["Jméno příjemce"].get()
+            recipient = entries["E-mail příjemce"].get()
+            product = entries["Produkt"].get()
+            description = entries["Popis"].get("1.0", tk.END).strip()
+            firma = self.c.execute("SELECT value FROM user_data WHERE key='company'").fetchone()[0]
+            
+            template = f"Vážený {name},\n\nRádi bychom Vás informovali o našem novém produktu {product}.\n\n{description}\n\nS pozdravem,\n{firma}"
+            
+            email_dialog = tk.Toplevel(self.root)
+            email_dialog.title("Vygenerovaný e-mail")
+            email_dialog.geometry("500x400")
+            
+            email_text = tk.Text(email_dialog, wrap=tk.WORD)
+            email_text.insert(tk.END, template)
+            email_text.pack(fill=tk.BOTH, expand=True)
+            
+            def copy_to_clipboard():
+                self.root.clipboard_clear()
+                self.root.clipboard_append(email_text.get("1.0", tk.END).strip())
+                self.display_output("E-mail byl zkopírován do schránky.")
+                email_dialog.destroy()
+            
+            ttk.Button(email_dialog, text="Kopírovat do schránky", command=copy_to_clipboard).pack(side=tk.BOTTOM, pady=10)
+        
+        fields = [
+            ("Jméno příjemce", "", "entry", None),
+            ("E-mail příjemce", "", "entry", None),
+            ("Produkt", "", "entry", None),
+            ("Popis", "", "text", None)
+        ]
+        
+        self.create_edit_dialog("Generovat e-mail", fields, generate_and_show)
+        self.display_output("Chcete vygenerovat e-mail? Otevřel jsem dialog.")
 
+    def generate_fb_post(self):
+        """Generování příspěvku na Facebook pro reprezentativní účely"""
+        def generate_and_show(entries):
+            product = entries["Produkt"].get()
+            description = entries["Popis"].get("1.0", tk.END).strip()
+            
+            template = f"Právě jsme spustili nový produkt {product}! {description} Navštivte náš web pro více informací."
+            
+            fb_dialog = tk.Toplevel(self.root)
+            fb_dialog.title("Vygenerovaný příspěvek na FB")
+            fb_dialog.geometry("500x200")
+            
+            fb_text = tk.Text(fb_dialog, wrap=tk.WORD)
+            fb_text.insert(tk.END, template)
+            fb_text.pack(fill=tk.BOTH, expand=True)
+            
+            def copy_to_clipboard():
+                self.root.clipboard_clear()
+                self.root.clipboard_append(fb_text.get("1.0", tk.END).strip())
+                self.display_output("Příspěvek byl zkopírován do schránky.")
+                fb_dialog.destroy()
+            
+            ttk.Button(fb_dialog, text="Kopírovat do schránky", command=copy_to_clipboard).pack(side=tk.BOTTOM, pady=10)
+        
+        fields = [
+            ("Produkt", "", "entry", None),
+            ("Popis", "", "text", None)
+        ]
+        
+        self.create_edit_dialog("Generovat příspěvek na FB", fields, generate_and_show)
+        self.display_output("Chcete vygenerovat příspěvek na FB? Otevřel jsem dialog.")
+
+    def generate_web_content(self):
+        """Generování obsahu na web pro reprezentativní účely"""
+        def generate_and_show(entries):
+            topic = entries["Téma"].get()
+            content = entries["Obsah"].get("1.0", tk.END).strip()
+            
+            template = f"Nový článek: {topic}\n\n{content}"
+            
+            web_dialog = tk.Toplevel(self.root)
+            web_dialog.title("Vygenerovaný obsah na web")
+            web_dialog.geometry("500x400")
+            
+            web_text = tk.Text(web_dialog, wrap=tk.WORD)
+            web_text.insert(tk.END, template)
+            web_text.pack(fill=tk.BOTH, expand=True)
+            
+            def save_to_file():
+                file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Textové soubory", "*.txt")])
+                if file_path:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(web_text.get("1.0", tk.END).strip())
+                    self.display_output(f"Obsah byl uložen do {file_path}.")
+                    web_dialog.destroy()
+            
+            ttk.Button(web_dialog, text="Uložit do souboru", command=save_to_file).pack(side=tk.BOTTOM, pady=10)
+        
+        fields = [
+            ("Téma", "", "entry", None),
+            ("Obsah", "", "text", None)
+        ]
+        
+        self.create_edit_dialog("Generovat obsah na web", fields, generate_and_show)
+        self.display_output("Chcete vygenerovat obsah na web? Otevřel jsem dialog.")
 if __name__ == "__main__":
     root = tk.Tk()
     app = AdminAI(root)
