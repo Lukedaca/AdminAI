@@ -1,97 +1,80 @@
-# AdminAI - Personální Asistent
+# AdminAI - Personální Asistent s AI
 
-## 📌 Popis projektu
-AdminAI je inteligentní **administrativní asistent**, který pomáhá s řízením pracovních úkolů, schůzek, připomenutí a e-mailů. Nabízí jednoduché **grafické rozhraní (GUI)** postavené na **Tkinteru**, umožňuje správu databáze SQLite a integraci s e-mailovým serverem.
+## 📝 Popis projektu
 
-Tento asistent je určen **manažerům, zaměstnancům i freelancerům**, kteří chtějí efektivně řídit svůj pracovní den.
+AdminAI je chytrý **personální asistent**, který pomáhá **automatizovat administrativní úkony** a **generovat obsah** pomocí **AI modelu DistilGPT-2**. Aplikace umožňuje snadnou správu schůzek, úkolů, e-mailů a dokumentů, přičemž využívá **strojové učení** pro zlepšení uživatelského zážitku.
 
----
+## 🎯 Klíčové funkce
 
-## ⚡ Hlavní funkce
-- 📅 **Plánování schůzek** – přidávání, editace a mazání schůzek v databázi
-- ✅ **Správa úkolů** – přidávání úkolů, nastavování priorit a sledování jejich stavu
-- 🔔 **Připomenutí** – možnost nastavit upozornění na důležité události
-- ✉️ **Správa e-mailů** – odesílání e-mailů pomocí SMTP serveru
-- 📂 **Archivace dokumentů** – ukládání souborů do předdefinované složky
-- 📊 **Statistiky a reporty** – analýza naplánovaných schůzek a úkolů
-- 🏠 **Přizpůsobení aplikace** – možnost změnit konfiguraci, téma nebo uživatelská data
-- 🔍 **Automatické učení vzorců chování** – asistent si pamatuje časté příkazy a přizpůsobuje se
+✅ **Správa schůzek** – plánování a zobrazení seznamu schůzek ✅ **Správa úkolů** – přidávání, editace a dokončení úkolů ✅ **E-mailový asistent** – generování a odesílání e-mailů ✅ **Generátor obsahu** – tvorba textů pro web, Facebook a reporty ✅ **Připomenutí** – upozornění na důležité události ✅ **Analýza a statistiky** – vizualizace schůzek a úkolů ✅ **Uživatelské preference** – přizpůsobení podle zvyklostí uživatele ✅ **Lokální AI (DistilGPT-2)** – rychlé generování textů bez nutnosti API ✅ **Export do PDF** – možnost uložit generovaný obsah do souboru
 
----
+## 📂 Struktura projektu
 
-## 🛠 Technologie
-- **Python** – hlavní programovací jazyk
-- **Tkinter** – GUI rozhraní
-- **SQLite** – databázová správa
-- **Matplotlib** – generování grafických statistik
-- **Pandas** – práce s daty
-- **smtplib** – odesílání e-mailů
-- **JSON** – konfigurace aplikace
-- **Logging** – ukládání logů pro debugging
+```
+AdminAI/
+│-- adminai.py       # Hlavní soubor aplikace
+│-- adminai.db       # Databáze aplikace
+│-- adminai_config.json # Konfigurační soubor
+│-- log/             # Složka s logy aplikace
+│-- README.md        # Tento soubor
+```
 
----
+## 🚀 Jak spustit aplikaci?
 
-## 🔧 Instalace
-1. **Naklonuj repozitář** nebo stáhni soubor `AdminAI6.py`
-2. Ujisti se, že máš nainstalované následující knihovny:
-   ```bash
-   pip install pandas matplotlib tkcalendar
-   ```
-3. **Spusť aplikaci**:
-   ```bash
-   python AdminAI6.py
-   ```
+### 1️⃣ Požadavky
 
----
+- **Python 3.8+**
+- Knihovny (nainstaluj pomocí pip):
+  ```bash
+  pip install sqlite3 tkinter pandas matplotlib smtplib email json logging transformers textblob reportlab
+  ```
 
-## 🚀 Použití
-### Ovládání přes GUI
-Po spuštění aplikace se zobrazí **grafické rozhraní**, kde můžeš:
-- **Spravovat schůzky** a úkoly pomocí menu
-- **Zadávat příkazy** do textového pole (např. „Naplánuj schůzku“)
-- **Zobrazit statistiky** o schůzkách a úkolech
+### 2️⃣ Spuštění aplikace
 
-### Příkazy asistenta
-AdminAI rozpoznává textové příkazy:
-- **„Naplánuj schůzku“** → otevře dialog pro přidání schůzky
-- **„Přidej úkol“** → přidá nový úkol s prioritou
-- **„Jaké mám schůzky dnes?“** → zobrazí dnešní schůzky
-- **„Pošli email“** → otevře dialog pro odeslání e-mailu
-- **„Nastav připomenutí“** → vytvoří upozornění
+```bash
+python adminai.py
+```
 
----
+Aplikace se spustí v okně s grafickým rozhraním.
 
-## 📝 Konfigurace
-Aplikace ukládá nastavení v souboru **`adminai_config.json`**, kde lze změnit například:
+## 🛠️ Jak používat AdminAI?
+
+### 📌 Správa schůzek
+
+- Klikni na **"Naplánovat schůzku"** a vyplň údaje.
+- Schůzky lze **upravit** nebo **smazat** kliknutím pravým tlačítkem.
+
+### 📌 Správa úkolů
+
+- Přidání úkolu přes **"Přidat úkol"**.
+- Označení úkolu jako **dokončený** nebo jeho **smazání**.
+
+### 📌 Generování obsahu s AI
+
+- **E-maily:** "Generovat e-mail"
+- **Příspěvky na FB:** "Generovat příspěvek na FB"
+- **Obsah na web:** "Generovat obsah na web"
+- **Export do PDF** nebo **kopírování do schránky**
+
+### 📌 Statistiky a analýzy
+
+- **"Zobrazit statistiky"** ukáže přehled schůzek a úkolů.
+- **„Vygenerovat report"** vytvoří vizuální analýzu schůzek.
+
+## 🔧 Konfigurace
+
+Aplikace ukládá nastavení do **adminai\_config.json**. Můžeš zde změnit:
+
 - SMTP server pro e-maily
-- Výchozí složku pro archivaci
-- Interval kontroly připomenutí
+- Archivní složku pro dokumenty
+- Frekvenci připomenutí
+- Téma aplikace (světlé/tmavé)
 
-Pokud tento soubor neexistuje, aplikace ho **automaticky vytvoří**.
+## 📌 Poznámky
 
----
+Tento projekt je **lokální aplikace** – nevyžaduje připojení k API a všechny údaje jsou uloženy v **soukromé databázi**.
 
-## 📈 Statistiky a reporty
-Aplikace umožňuje vizuální přehled naplánovaných schůzek a úkolů:
-- Zobrazuje **graf** s rozložením schůzek
-- Sčítá počet dokončených a nedokončených úkolů
-- Generuje tabulkové přehledy přímo v GUI
+## 📞 Kontakt
 
----
+lukas.drsticka@gmail.com 😊
 
-## 🔗 Další možnosti
-- **Změna tématu** aplikace (světlé/tmavé)
-- **Kontextová nabídka** (pravé kliknutí) pro editaci úkolů a schůzek
-- **Automatické učení příkazů** – AdminAI si pamatuje často používané příkazy
-
----
-
-## 🏆 Autor
-Tento projekt vyvinul **Lukáš Drštička** v rámci vývoje **AI agentů**. Pokud máš dotazy nebo chceš vylepšení, můžeš se ozvat na **lukas.drsticka@gmail.com**.
-
----
-
-## 📌 Závěr
-AdminAI je **praktický nástroj**, který ti usnadní každodenní pracovní úkoly a zlepší organizaci. 🚀
-
-Chceš vylepšení? Máš nápad na novou funkci? **Neváhej přispět!** 😊
