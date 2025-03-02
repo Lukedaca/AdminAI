@@ -14,6 +14,10 @@ from email.mime.multipart import MIMEMultipart
 import json
 import logging
 import random
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+# Nový import pro PDF export
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 # Nastavení loggeru
 logging.basicConfig(filename='adminai.log', level=logging.INFO, 
@@ -31,6 +35,12 @@ class AdminAI:
         # Načtení konfigurace
         self.config = self.load_config()
         
+        # Inicializace GPT-2 (použijeme distilgpt2 pro rychlost)
+        self.tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+        self.model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+        self.model.eval()
+        logging.info("DistilGPT-2 model a tokenizer inicializovány")
+        
         # Nastavení GUI
         self.setup_ui()
         
@@ -44,7 +54,7 @@ class AdminAI:
         self.nlp_patterns = {**self.default_patterns, **self.learned_patterns}
         
         # Uvítání
-        self.display_output("AdminAI spuštěn. Jak vám mohu dnes pomoci?")
+        self.display_output("AdminAI spuštěn s DistilGPT-2. Jak vám mohu dnes pomoci?")
         
         logging.info("AdminAI inicializován")
 
@@ -54,7 +64,6 @@ class AdminAI:
             self.conn = sqlite3.connect('adminai.db')
             self.c = self.conn.cursor()
             
-            # Vytvoření tabulek, pokud neexistují
             self.c.execute('''CREATE TABLE IF NOT EXISTS meetings 
                         (id INTEGER PRIMARY KEY, date TEXT, time TEXT, participants TEXT, 
                         location TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
@@ -85,13 +94,11 @@ class AdminAI:
                         (id INTEGER PRIMARY KEY, message TEXT, due_datetime TIMESTAMP, 
                         is_completed INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             
-            # Přidání chybějících sloupců do existujících tabulek
             self.add_missing_columns('meetings', ['location TEXT'])
             self.add_missing_columns('tasks', ['priority TEXT', 'status TEXT DEFAULT "pending"'])
             self.add_missing_columns('reminders', ['due_datetime TIMESTAMP'])
             self.add_missing_columns('preferences', ['count INTEGER DEFAULT 1'])
             
-            # Inicializace výchozích uživatelských dat, pokud neexistují
             default_user_data = {
                 'name': 'Jan Novak',
                 'email': 'jan.novak@example.com',
@@ -132,7 +139,7 @@ class AdminAI:
             "email_username": "",
             "email_password": "",
             "archive_folder": "archiv",
-            "reminder_check_interval": 60,  # sekundy
+            "reminder_check_interval": 60,
             "theme": "light",
             "language": "cs",
             "date_format": "%Y-%m-%d",
@@ -164,11 +171,9 @@ class AdminAI:
             logging.error(f"Chyba při ukládání konfigurace: {e}")
     def setup_ui(self):
         """Nastavení uživatelského rozhraní"""
-        # Hlavní menu
         self.menu_bar = tk.Menu(self.root)
         self.root.config(menu=self.menu_bar)
 
-        # Menu Funkce
         self.admin_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Funkce", menu=self.admin_menu)
 
@@ -178,7 +183,6 @@ class AdminAI:
         self.admin_menu.add_command(label="Archivovat dokument", command=lambda: self.archive_document())
         self.admin_menu.add_command(label="Přidat úkol", command=lambda: self.plan_task())
         self.admin_menu.add_command(label="Vygenerovat report", command=lambda: self.generate_report())
-        # Nové položky
         self.admin_menu.add_command(label="Generovat e-mail", command=lambda: self.generate_email())
         self.admin_menu.add_command(label="Generovat příspěvek na FB", command=lambda: self.generate_fb_post())
         self.admin_menu.add_command(label="Generovat obsah na web", command=lambda: self.generate_web_content())
@@ -186,7 +190,6 @@ class AdminAI:
         self.admin_menu.add_command(label="Nastavit připomenutí", command=lambda: self.set_reminder())
         self.admin_menu.add_command(label="Zobrazit statistiky", command=lambda: self.show_statistics())
 
-        # Menu Zobrazit
         self.view_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Zobrazit", menu=self.view_menu)
         
@@ -196,31 +199,26 @@ class AdminAI:
         self.view_menu.add_command(label="Seznam dokumentů", command=lambda: self.show_items("document"))
         self.view_menu.add_command(label="Seznam připomenutí", command=lambda: self.show_items("reminder"))
 
-        # Menu Nastavení
         self.settings_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Nastavení", menu=self.settings_menu)
         
         self.settings_menu.add_command(label="Nastavení aplikace", command=self.open_settings)
         self.settings_menu.add_command(label="Upravit uživatelská data", command=self.edit_user_data)
         
-        # Téma
         self.theme_menu = tk.Menu(self.settings_menu, tearoff=0)
         self.settings_menu.add_cascade(label="Téma", menu=self.theme_menu)
         self.theme_menu.add_command(label="Světlé", command=lambda: self.change_theme("light"))
         self.theme_menu.add_command(label="Tmavé", command=lambda: self.change_theme("dark"))
 
-        # Menu Nápověda
         self.help_menu = tk.Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Nápověda", menu=self.help_menu)
         
         self.help_menu.add_command(label="O aplikaci", command=self.show_about)
         self.help_menu.add_command(label="Nápověda", command=self.show_help)
 
-        # Frame pro vstup
         self.input_frame = ttk.Frame(self.root, padding="10")
         self.input_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        # Label a vstupní pole
         self.entry_label = ttk.Label(self.input_frame, text="Zadej příkaz:")
         self.entry_label.pack(side=tk.LEFT, padx=5)
         
@@ -228,32 +226,25 @@ class AdminAI:
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.entry.bind("<Return>", lambda event: self.process_command())
         
-        # Tlačítko pro zpracování příkazu
         self.button = ttk.Button(self.input_frame, text="Spustit", command=self.process_command)
         self.button.pack(side=tk.LEFT, padx=5)
 
-        # Notebook (záložky) pro rozdělení funkcí
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # Záložka s výstupem
         self.output_frame = ttk.Frame(self.notebook, padding="10")
         self.notebook.add(self.output_frame, text="Výstup")
         
-        # Výstupní textové pole
         self.output_text = tk.Text(self.output_frame, height=15, width=70, wrap=tk.WORD)
         self.output_text.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         
-        # Scrollbar pro výstupní text
         self.scrollbar = ttk.Scrollbar(self.output_frame, command=self.output_text.yview)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.output_text.config(yscrollcommand=self.scrollbar.set)
         
-        # Záložka s přehledem úkolů
         self.tasks_frame = ttk.Frame(self.notebook, padding="10")
         self.notebook.add(self.tasks_frame, text="Úkoly")
         
-        # Seznam úkolů
         self.tasks_treeview = ttk.Treeview(self.tasks_frame, columns=("task", "deadline", "priority", "status"), show="headings")
         self.tasks_treeview.heading("task", text="Úkol")
         self.tasks_treeview.heading("deadline", text="Termín")
@@ -271,14 +262,11 @@ class AdminAI:
         self.tasks_treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tasks_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Pravé tlačítko myši na úkoly
         self.tasks_treeview.bind("<Button-3>", self.show_task_context_menu)
         
-        # Záložka s přehledem schůzek
         self.meetings_frame = ttk.Frame(self.notebook, padding="10")
         self.notebook.add(self.meetings_frame, text="Schůzky")
         
-        # Seznam schůzek
         self.meetings_treeview = ttk.Treeview(self.meetings_frame, columns=("date", "time", "participants", "location"), show="headings")
         self.meetings_treeview.heading("date", text="Datum")
         self.meetings_treeview.heading("time", text="Čas")
@@ -296,14 +284,11 @@ class AdminAI:
         self.meetings_treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.meetings_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Pravé tlačítko myši na schůzky
         self.meetings_treeview.bind("<Button-3>", self.show_meeting_context_menu)
         
-        # Naplnění dat
         self.refresh_task_list()
         self.refresh_meeting_list()
         
-        # Stavový řádek
         self.status_frame = ttk.Frame(self.root, relief=tk.SUNKEN, padding=(5, 2))
         self.status_frame.pack(side=tk.BOTTOM, fill=tk.X)
         
@@ -313,7 +298,6 @@ class AdminAI:
         self.status_clock = ttk.Label(self.status_frame, text="")
         self.status_clock.pack(side=tk.RIGHT)
         
-        # Spuštění hodin
         self.update_clock()
     def update_clock(self):
         """Aktualizace hodin ve stavové liště"""
@@ -373,7 +357,6 @@ class AdminAI:
             r'pošli\s+email': self.send_email,
             r'(nastav|zobraz)\s+připomenutí\s+pro\s+(\d{4}-\d{2}-\d{2})': self.set_or_show_reminder_by_date,
             r'(jak\s+se\s+máš|co\s+je\s+nového)': self.respond_to_general_question,
-            # Nové vzory
             r'(vytvoř|generuj)\s+e-?mail': self.generate_email,
             r'(vytvoř|generuj)\s+příspěvek\s+na\s+fb': self.generate_fb_post,
             r'(vytvoř|generuj)\s+obsah\s+na\s+web': self.generate_web_content,
@@ -407,6 +390,24 @@ class AdminAI:
         """Obsluha učeného příkazu"""
         self.display_output(f"Reaguji na učený příkaz: '{cmd}'. Jak vám mohu pomoci?")
         logging.info(f"Učený příkaz zpracován: {cmd}")
+
+    def generate_text(self, prompt, max_length=100, temperature=0.7, top_k=50):
+        """Generování textu pomocí DistilGPT-2"""
+        try:
+            input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
+            output = self.model.generate(
+                input_ids,
+                max_length=max_length,
+                temperature=temperature,
+                top_k=top_k,
+                do_sample=True,
+                pad_token_id=self.tokenizer.eos_token_id
+            )
+            generated_text = self.tokenizer.decode(output[0], skip_special_tokens=True)
+            return generated_text
+        except Exception as e:
+            logging.error(f"Chyba při generování textu GPT-2: {e}")
+            return f"Chyba při generování: {e}"
     def create_edit_dialog(self, title, fields, callback, validation_func=None):
         """Dialogové okno pro úpravu parametrů s validací"""
         dialog = tk.Toplevel(self.root)
@@ -599,7 +600,6 @@ class AdminAI:
                 style.configure('TButton', background='#333333', foreground='white')
                 style.configure('TNotebook', background='#1e1e1e')
                 style.configure('TNotebook.Tab', background='#333333', foreground='white')
-                
                 self.output_text.configure(bg='#2d2d2d', fg='white', insertbackground='white')
             else:
                 self.root.configure(bg='#f0f0f0')
@@ -610,14 +610,11 @@ class AdminAI:
                 style.configure('TButton', background='#e0e0e0', foreground='black')
                 style.configure('TNotebook', background='#f0f0f0')
                 style.configure('TNotebook.Tab', background='#e0e0e0', foreground='black')
-                
                 self.output_text.configure(bg='white', fg='black', insertbackground='black')
             
             self.config["theme"] = theme_name
             self.save_config()
-            
             self.display_output(f"Téma změněno na: {theme_name}. Potřebujete další pomoc?")
-            
         except Exception as e:
             logging.error(f"Chyba při změně tématu: {e}")
             messagebox.showerror("Chyba", f"Nepodařilo se změnit téma: {e}")
@@ -626,7 +623,7 @@ class AdminAI:
         """Zobrazení informací o aplikaci"""
         about_text = """
         AdminAI - Personální Asistent
-        Verze: 2.0
+        Verze: 2.0 s DistilGPT-2
         
         Aplikace pro správu administrativních úkonů:
         - Plánování schůzek
@@ -636,10 +633,10 @@ class AdminAI:
         - Přidávání úkolů
         - Generování reportů
         - Připomenutí
+        - Generování obsahu pomocí GPT-2
         
         © 2025 AdminAI Developers
         """
-        
         messagebox.showinfo("O aplikaci", about_text)
 
     def show_help(self):
@@ -656,9 +653,9 @@ class AdminAI:
         - 'Zobraz statistiky' - ukáže počet schůzek a úkolů
         - 'Jaké mám schůzky dnes' - zobrazí dnešní schůzky
         - 'Pošli email' - pošle e-mail
-        - 'Vytvoř e-mail' - vygeneruje e-mail pro zkopírování
-        - 'Vytvoř příspěvek na FB' - vygeneruje příspěvek pro Facebook
-        - 'Vytvoř obsah na web' - vygeneruje obsah pro web
+        - 'Vytvoř e-mail' - vygeneruje e-mail pomocí GPT-2 (kopírování nebo PDF)
+        - 'Vytvoř příspěvek na FB' - vygeneruje příspěvek pro Facebook (kopírování nebo PDF)
+        - 'Vytvoř obsah na web' - vygeneruje obsah pro web (TXT nebo PDF)
         - 'Zobraz připomenutí pro [datum]' - ukáže připomenutí pro konkrétní datum
         - 'Co můžeš udělat' - ukáže tuto nápovědu
         - 'Ahoj' nebo 'Dobrý den' - přivítání
@@ -677,7 +674,7 @@ class AdminAI:
     def list_capabilities(self):
         """Vyjmenování funkcí asistenta"""
         capabilities = """
-        Jsem AdminAI, váš personální asistent. Umím následující:
+        Jsem AdminAI, váš personální asistent s DistilGPT-2. Umím následující:
         - Plánovat schůzky (např. 'naplánuj schůzku')
         - Přidávat úkoly (např. 'přidej úkol')
         - Archivovat dokumenty (např. 'archivuj dokument')
@@ -686,9 +683,9 @@ class AdminAI:
         - Zobrazovat statistiky (např. 'zobraz statistiky')
         - Zobrazovat dnešní schůzky (např. 'jaké mám schůzky dnes')
         - Posílat e-maily (např. 'pošli email')
-        - Generovat e-maily (např. 'vytvoř e-mail')
-        - Generovat příspěvky na Facebook (např. 'vytvoř příspěvek na FB')
-        - Generovat obsah na web (např. 'vytvoř obsah na web')
+        - Generovat e-maily pomocí GPT-2 (např. 'vytvoř e-mail', export do PDF)
+        - Generovat příspěvky na Facebook pomocí GPT-2 (např. 'vytvoř příspěvek na FB', export do PDF)
+        - Generovat obsah na web pomocí GPT-2 (např. 'vytvoř obsah na web', export do TXT/PDF)
         - Zobrazovat připomenutí pro konkrétní datum (např. 'zobraz připomenutí pro 2025-03-15')
         - Spravovat e-maily (zatím neimplementováno)
         - Vyplňovat formuláře (zatím neimplementováno)
@@ -1116,22 +1113,24 @@ class AdminAI:
         menu.add_command(label="Smazat", command=delete_meeting)
         menu.post(event.x_root, event.y_root)
     def generate_email(self):
-        """Generování e-mailu pro reprezentativní účely"""
+        """Generování e-mailu pomocí DistilGPT-2 s exportem do PDF"""
         def generate_and_show(entries):
             name = entries["Jméno příjemce"].get()
             recipient = entries["E-mail příjemce"].get()
             product = entries["Produkt"].get()
             description = entries["Popis"].get("1.0", tk.END).strip()
+            temperature = float(entries["Kreativita"].get())
             firma = self.c.execute("SELECT value FROM user_data WHERE key='company'").fetchone()[0]
             
-            template = f"Vážený {name},\n\nRádi bychom Vás informovali o našem novém produktu {product}.\n\n{description}\n\nS pozdravem,\n{firma}"
+            prompt = f"Napiš formální e-mail pro {name} od firmy {firma} o novém produktu {product}. Popis produktu: {description}"
+            generated_text = self.generate_text(prompt, max_length=200, temperature=temperature)
             
             email_dialog = tk.Toplevel(self.root)
-            email_dialog.title("Vygenerovaný e-mail")
+            email_dialog.title("Vygenerovaný e-mail (GPT-2)")
             email_dialog.geometry("500x400")
             
             email_text = tk.Text(email_dialog, wrap=tk.WORD)
-            email_text.insert(tk.END, template)
+            email_text.insert(tk.END, generated_text)
             email_text.pack(fill=tk.BOTH, expand=True)
             
             def copy_to_clipboard():
@@ -1140,32 +1139,53 @@ class AdminAI:
                 self.display_output("E-mail byl zkopírován do schránky.")
                 email_dialog.destroy()
             
-            ttk.Button(email_dialog, text="Kopírovat do schránky", command=copy_to_clipboard).pack(side=tk.BOTTOM, pady=10)
+            def save_to_pdf():
+                file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF soubory", "*.pdf")])
+                if file_path:
+                    c = canvas.Canvas(file_path, pagesize=letter)
+                    c.setFont("Helvetica", 12)
+                    text_obj = c.beginText(40, 750)
+                    for line in email_text.get("1.0", tk.END).strip().split("\n"):
+                        text_obj.textLine(line)
+                    c.drawText(text_obj)
+                    c.showPage()
+                    c.save()
+                    self.display_output(f"E-mail byl uložen jako PDF do {file_path}.")
+                    email_dialog.destroy()
+            
+            button_frame = ttk.Frame(email_dialog)
+            button_frame.pack(side=tk.BOTTOM, pady=10)
+            ttk.Button(button_frame, text="Kopírovat do schránky", command=copy_to_clipboard).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="Uložit jako PDF", command=save_to_pdf).pack(side=tk.LEFT, padx=5)
         
         fields = [
             ("Jméno příjemce", "", "entry", None),
             ("E-mail příjemce", "", "entry", None),
             ("Produkt", "", "entry", None),
-            ("Popis", "", "text", None)
+            ("Popis", "", "text", None),
+            ("Kreativita", "0.7", "entry", None)
         ]
         
-        self.create_edit_dialog("Generovat e-mail", fields, generate_and_show)
-        self.display_output("Chcete vygenerovat e-mail? Otevřel jsem dialog.")
+        self.create_edit_dialog("Generovat e-mail (GPT-2)", fields, generate_and_show)
+        self.display_output("Chcete vygenerovat e-mail pomocí GPT-2? Otevřel jsem dialog.")
 
     def generate_fb_post(self):
-        """Generování příspěvku na Facebook pro reprezentativní účely"""
+        """Generování příspěvku na Facebook pomocí DistilGPT-2 s exportem do PDF"""
         def generate_and_show(entries):
             product = entries["Produkt"].get()
             description = entries["Popis"].get("1.0", tk.END).strip()
+            temperature = float(entries["Kreativita"].get())
+            firma = self.c.execute("SELECT value FROM user_data WHERE key='company'").fetchone()[0]
             
-            template = f"Právě jsme spustili nový produkt {product}! {description} Navštivte náš web pro více informací."
+            prompt = f"Napiš krátký a poutavý příspěvek na Facebook od firmy {firma} o novém produktu {product}. Popis: {description}"
+            generated_text = self.generate_text(prompt, max_length=100, temperature=temperature)
             
             fb_dialog = tk.Toplevel(self.root)
-            fb_dialog.title("Vygenerovaný příspěvek na FB")
+            fb_dialog.title("Vygenerovaný příspěvek na FB (GPT-2)")
             fb_dialog.geometry("500x200")
             
             fb_text = tk.Text(fb_dialog, wrap=tk.WORD)
-            fb_text.insert(tk.END, template)
+            fb_text.insert(tk.END, generated_text)
             fb_text.pack(fill=tk.BOTH, expand=True)
             
             def copy_to_clipboard():
@@ -1174,30 +1194,51 @@ class AdminAI:
                 self.display_output("Příspěvek byl zkopírován do schránky.")
                 fb_dialog.destroy()
             
-            ttk.Button(fb_dialog, text="Kopírovat do schránky", command=copy_to_clipboard).pack(side=tk.BOTTOM, pady=10)
+            def save_to_pdf():
+                file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF soubory", "*.pdf")])
+                if file_path:
+                    c = canvas.Canvas(file_path, pagesize=letter)
+                    c.setFont("Helvetica", 12)
+                    text_obj = c.beginText(40, 750)
+                    for line in fb_text.get("1.0", tk.END).strip().split("\n"):
+                        text_obj.textLine(line)
+                    c.drawText(text_obj)
+                    c.showPage()
+                    c.save()
+                    self.display_output(f"Příspěvek byl uložen jako PDF do {file_path}.")
+                    fb_dialog.destroy()
+            
+            button_frame = ttk.Frame(fb_dialog)
+            button_frame.pack(side=tk.BOTTOM, pady=10)
+            ttk.Button(button_frame, text="Kopírovat do schránky", command=copy_to_clipboard).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="Uložit jako PDF", command=save_to_pdf).pack(side=tk.LEFT, padx=5)
         
         fields = [
             ("Produkt", "", "entry", None),
-            ("Popis", "", "text", None)
+            ("Popis", "", "text", None),
+            ("Kreativita", "0.7", "entry", None)
         ]
         
-        self.create_edit_dialog("Generovat příspěvek na FB", fields, generate_and_show)
-        self.display_output("Chcete vygenerovat příspěvek na FB? Otevřel jsem dialog.")
+        self.create_edit_dialog("Generovat příspěvek na FB (GPT-2)", fields, generate_and_show)
+        self.display_output("Chcete vygenerovat příspěvek na FB pomocí GPT-2? Otevřel jsem dialog.")
 
     def generate_web_content(self):
-        """Generování obsahu na web pro reprezentativní účely"""
+        """Generování obsahu na web pomocí DistilGPT-2 s exportem do PDF"""
         def generate_and_show(entries):
             topic = entries["Téma"].get()
             content = entries["Obsah"].get("1.0", tk.END).strip()
+            temperature = float(entries["Kreativita"].get())
+            firma = self.c.execute("SELECT value FROM user_data WHERE key='company'").fetchone()[0]
             
-            template = f"Nový článek: {topic}\n\n{content}"
+            prompt = f"Napiš článek pro web od firmy {firma} na téma {topic}. Úvodní informace: {content}"
+            generated_text = self.generate_text(prompt, max_length=300, temperature=temperature)
             
             web_dialog = tk.Toplevel(self.root)
-            web_dialog.title("Vygenerovaný obsah na web")
+            web_dialog.title("Vygenerovaný obsah na web (GPT-2)")
             web_dialog.geometry("500x400")
             
             web_text = tk.Text(web_dialog, wrap=tk.WORD)
-            web_text.insert(tk.END, template)
+            web_text.insert(tk.END, generated_text)
             web_text.pack(fill=tk.BOTH, expand=True)
             
             def save_to_file():
@@ -1208,15 +1249,33 @@ class AdminAI:
                     self.display_output(f"Obsah byl uložen do {file_path}.")
                     web_dialog.destroy()
             
-            ttk.Button(web_dialog, text="Uložit do souboru", command=save_to_file).pack(side=tk.BOTTOM, pady=10)
+            def save_to_pdf():
+                file_path = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF soubory", "*.pdf")])
+                if file_path:
+                    c = canvas.Canvas(file_path, pagesize=letter)
+                    c.setFont("Helvetica", 12)
+                    text_obj = c.beginText(40, 750)
+                    for line in web_text.get("1.0", tk.END).strip().split("\n"):
+                        text_obj.textLine(line)
+                    c.drawText(text_obj)
+                    c.showPage()
+                    c.save()
+                    self.display_output(f"Obsah byl uložen jako PDF do {file_path}.")
+                    web_dialog.destroy()
+            
+            button_frame = ttk.Frame(web_dialog)
+            button_frame.pack(side=tk.BOTTOM, pady=10)
+            ttk.Button(button_frame, text="Uložit do souboru", command=save_to_file).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="Uložit jako PDF", command=save_to_pdf).pack(side=tk.LEFT, padx=5)
         
         fields = [
             ("Téma", "", "entry", None),
-            ("Obsah", "", "text", None)
+            ("Obsah", "", "text", None),
+            ("Kreativita", "0.7", "entry", None)
         ]
         
-        self.create_edit_dialog("Generovat obsah na web", fields, generate_and_show)
-        self.display_output("Chcete vygenerovat obsah na web? Otevřel jsem dialog.")
+        self.create_edit_dialog("Generovat obsah na web (GPT-2)", fields, generate_and_show)
+        self.display_output("Chcete vygenerovat obsah na web pomocí GPT-2? Otevřel jsem dialog.")
 if __name__ == "__main__":
     root = tk.Tk()
     app = AdminAI(root)
